@@ -1,7 +1,7 @@
 import pandas as pd
 import os
 
-def run(file: str):
+def clean_dataset(file: str):
     print(f"[Clean] Loading dataset: {file}")
     df = pd.read_csv(file)
 
