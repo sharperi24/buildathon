@@ -1,0 +1,7 @@
+typer
+pandas
+rich
+matplotlib
+plotext
+pyarrow
+pyyaml
