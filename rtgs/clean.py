@@ -1,39 +1,52 @@
 import pandas as pd
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 def clean_dataset(file: str):
-    print(f"[Clean] Loading dataset: {file}")
+    logger.info(f"[Clean] Loading dataset: {file}")
     df = pd.read_csv(file)
 
     # 1. Standardize column names
     df.columns = (
-        df.columns.str.strip()       # remove spaces at ends
-                 .str.lower()        # lowercase
-                 .str.replace(" ", "_")  # spaces → underscore
-                 .str.replace("-", "_")  # dashes → underscore
+        df.columns.str.strip()
+                 .str.lower()
+                 .str.replace(" ", "_")
+                 .str.replace("-", "_")
     )
 
     # 2. Handle missing values
-    missing_report = df.isna().sum()
-    print("[Clean] Missing values:\n", missing_report)
+    missing_report = df.isna().sum().to_dict()
+    logger.info(f"[Clean] Missing values per column: {missing_report}")
 
-    # Example strategy: drop rows where ALL columns are NaN
+    # Drop rows where ALL values are NaN
     df = df.dropna(how="all")
 
-    # Example strategy: fill numeric NaN with column mean
+    # Fill missing values
     num_cols = df.select_dtypes(include="number").columns
+    cat_cols = df.select_dtypes(include="object").columns
+
     for col in num_cols:
         if df[col].isna().any():
             df[col] = df[col].fillna(df[col].mean())
 
-    # 3. Convert datatypes (example: ensure "year" is int)
-    if "year" in df.columns:
-        df["year"] = pd.to_numeric(df["year"], errors="coerce").astype("Int64")
+    for col in cat_cols:
+        if df[col].isna().any():
+            df[col] = df[col].fillna("Unknown")
+
+    # 3. Try to parse datetime-like columns
+    for col in df.columns:
+        if "date" in col or "time" in col:
+            try:
+                df[col] = pd.to_datetime(df[col] , format="%Y-%m-%d")
+            except Exception:
+                pass
 
     # 4. Save cleaned dataset
     out_path = "data/processed/cleaned.csv"
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     df.to_csv(out_path, index=False)
 
-    print(f"[Clean] Saved cleaned dataset to {out_path}")
+    logger.info(f"[Clean] Saved cleaned dataset to {out_path}")
     return df

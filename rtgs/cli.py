@@ -1,8 +1,8 @@
 import click
 from rtgs.ingest import ingest_dataset
 from rtgs.clean import clean_dataset
-from rtgs.analyze import analyze_rainfall
-
+from rtgs.analyze import analyze_dataset
+import os
 
 @click.group()
 def app():
@@ -37,17 +37,25 @@ def clean(file):
 # ------------------------
 @app.command()
 @click.argument("file")
-@click.option("--district", default=None, help="Filter by district")
-def analyze(file, district):
-    """Analyze cleaned rainfall dataset."""
-    results = analyze_rainfall(file, district)
+def analyze(file):
+    """Analyze any cleaned dataset (dataset-agnostic)."""
+    results = analyze_dataset(file)
 
-    click.echo("\n=== Average Rainfall by District ===")
-    click.echo(results["avg_table"])
+    click.echo("\n=== Dataset Overview ===")
+    click.echo(f"Rows: {results['rows']}, Columns: {results['columns']}")
+    click.echo("\nMissing values per column:")
+    for col, missing in results["missing"].items():
+        click.echo(f" {col}: {missing}")
 
-    click.echo(f"\n Wettest District: {results['wettest'][0]} ({results['wettest'][1]} mm avg)")
-    click.echo(f" Driest District: {results['driest'][0]} ({results['driest'][1]} mm avg)")
-    click.echo(f" Heavy Rainfall Days (>20mm): {results['heavy_days']}")
+    click.echo("\nReports saved to: out/reports/")
+    click.echo("Plots saved to: out/plots/")
+
+    # Optionally, list top/bottom 5 CSVs generated
+    top_bottom_files = [f for f in os.listdir("out/reports") if "top5" in f or "bottom5" in f]
+    if top_bottom_files:
+        click.echo("\nTop/Bottom 5 highlights:")
+        for f in top_bottom_files:
+            click.echo(f" - {f}")
 
 
 # ------------------------

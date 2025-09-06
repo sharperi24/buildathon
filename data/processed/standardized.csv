@@ -1,4 +1,4 @@
-District,Mandal,Date,Rain (mm),Min Humidity (%),Max Humidity (%)
+district,mandal,date,rain_(mm),min_humidity_(%),max_humidity_(%)
 Adilabad,19,01-Jul-25,14.3,83.0,100.0
 Adilabad,19,02-Jul-25,3.0,88.7,96.6
 Adilabad,19,03-Jul-25,9.5,78.3,97.5
