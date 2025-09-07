@@ -30,7 +30,30 @@ Stakeholders (like government departments, policy analysts, and researchers) can
 
 ---
 
-## Example Workflow
+## How to Run
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/your-username/rtgs-cli.git
+cd rtgs-cli
+```
+
+### 2. Set up a virtual environment
+
+```bash
+python -m venv venv
+source venv/bin/activate    # On Linux/Mac
+venv\Scripts\activate       # On Windows
+```
+
+### 3. Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Run the pipeline
 
 ```bash
 # Step 1: Ingest raw dataset
