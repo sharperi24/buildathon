@@ -1,114 +1,111 @@
+import click
 import pandas as pd
+import os
+import logging
 import matplotlib.pyplot as plt
 import seaborn as sns
-import os
+from rtgs.utils import setup_logging, create_output_dirs
 
-def analyze_dataset(file: str):
-    df = pd.read_csv(file)
-    results = {}
-    os.makedirs("out/plots", exist_ok=True)
-    os.makedirs("out/reports", exist_ok=True)
 
-    # Overview
-    rows, cols = df.shape
-    results["rows"] = rows
-    results["columns"] = cols
-    missing = df.isna().sum()
+@click.command()
+@click.argument("file", type=click.Path(exists=True))
+def analyze(file):
+    """Analyze cleaned dataset and generate a report + plots."""
+    setup_logging()
 
-    numeric_cols = df.select_dtypes(include="number").columns.tolist()
-    cat_cols = df.select_dtypes(include="object").columns.tolist()
+    dataset_name = os.path.splitext(os.path.basename(file))[0].replace("_cleaned", "")
+    reports_dir, plots_dir = create_output_dirs(dataset_name)
 
-    # --------------------
-    # Plots
-    # --------------------
-    for col in cat_cols:
-        plt.figure(figsize=(8,5))
-        df[col].value_counts().head(10).plot(kind="bar")
-        plt.title(f"Top Categories in {col}")
-        plt.tight_layout()
-        plt.savefig(f"out/plots/bar_{col}.png")
-        plt.close()
+    try:
+        logging.info(f"[Analyze] Loading dataset: {file}")
+        df = pd.read_csv(file)
 
-    for col in numeric_cols:
-        plt.figure(figsize=(8,5))
-        sns.histplot(df[col].dropna(), bins=30, kde=True)
-        plt.title(f"Distribution of {col}")
-        plt.tight_layout()
-        plt.savefig(f"out/plots/hist_{col}.png")
-        plt.close()
+        # --- Basic Stats ---
+        stats = {
+            "rows": len(df),
+            "columns": len(df.columns),
+            "missing_values": df.isna().sum().to_dict(),
+            "summary": df.describe(include="all").transpose()
+        }
 
-    for col in numeric_cols:
-        plt.figure(figsize=(6,5))
-        sns.boxplot(x=df[col].dropna())
-        plt.title(f"Boxplot of {col}")
-        plt.tight_layout()
-        plt.savefig(f"out/plots/box_{col}.png")
-        plt.close()
+        # Save stats report
+        report_path = os.path.join(reports_dir, f"{dataset_name}_report.txt")
+        with open(report_path, "w", encoding="utf-8") as f:
+            f.write("=== Dataset Overview ===\n")
+            f.write(f"Rows: {stats['rows']}, Columns: {stats['columns']}\n\n")
 
-    if len(numeric_cols) > 1:
-        plt.figure(figsize=(8,6))
-        sns.heatmap(df[numeric_cols].corr(), annot=True, cmap="coolwarm")
-        plt.title("Correlation Heatmap")
-        plt.tight_layout()
-        plt.savefig("out/plots/correlation_heatmap.png")
-        plt.close()
+            f.write("=== Missing Values ===\n")
+            for col, val in stats["missing_values"].items():
+                f.write(f"{col}: {val}\n")
+            f.write("\n")
 
-    date_cols = df.select_dtypes(include="datetime").columns.tolist()
-    if date_cols:
-        for col in numeric_cols:
-            for dcol in date_cols:
-                plt.figure(figsize=(8,5))
-                trend = df.groupby(df[dcol].dt.to_period("M"))[col].mean()
-                trend.plot()
-                plt.title(f"Trend of {col} over {dcol}")
-                plt.tight_layout()
-                plt.savefig(f"out/plots/line_{col}_over_{dcol}.png")
+            f.write("=== Summary Statistics ===\n")
+            f.write(str(stats["summary"]))
+            f.write("\n")
+
+        logging.info(f"[Analyze] Report saved: {report_path}")
+        click.echo(f"Report generated: {report_path}")
+
+        # --- Plots ---
+        num_cols = df.select_dtypes(include="number").columns
+        cat_cols = df.select_dtypes(include="object").columns
+
+        # 1. Histograms for numeric columns
+        for col in num_cols:
+            plt.figure()
+            sns.histplot(df[col].dropna(), kde=True)
+            plt.title(f"Distribution of {col}")
+            plt.savefig(os.path.join(plots_dir, f"{col}_hist.png"))
+            plt.close()
+
+        # 2. Boxplots for numeric columns
+        for col in num_cols:
+            plt.figure()
+            sns.boxplot(x=df[col].dropna())
+            plt.title(f"Boxplot of {col}")
+            plt.savefig(os.path.join(plots_dir, f"{col}_box.png"))
+            plt.close()
+
+        # 3. Scatter plots for first two numeric columns (if available)
+        if len(num_cols) >= 2:
+            plt.figure()
+            sns.scatterplot(x=df[num_cols[0]], y=df[num_cols[1]])
+            plt.title(f"Scatter: {num_cols[0]} vs {num_cols[1]}")
+            plt.savefig(os.path.join(plots_dir, f"{num_cols[0]}_vs_{num_cols[1]}_scatter.png"))
+            plt.close()
+
+        # 4. Correlation heatmap
+        if len(num_cols) > 1:
+            plt.figure(figsize=(8, 6))
+            corr = df[num_cols].corr()
+            sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f")
+            plt.title("Correlation Heatmap")
+            plt.savefig(os.path.join(plots_dir, "correlation_heatmap.png"))
+            plt.close()
+
+        # 5. Bar charts for categorical columns
+        for col in cat_cols:
+            if df[col].nunique() < 20:  # only for low-cardinality columns
+                plt.figure(figsize=(8, 4))
+                df[col].value_counts().plot(kind="bar")
+                plt.title(f"Bar Chart of {col}")
+                plt.ylabel("Count")
+                plt.savefig(os.path.join(plots_dir, f"{col}_bar.png"))
                 plt.close()
 
-    # -------------------------------
-    # Single consolidated Excel report
-    # -------------------------------
-    report_file = "out/reports/analysis_report.xlsx"
-    with pd.ExcelWriter(report_file) as writer:
-        df.describe(include="all").T.to_excel(writer, sheet_name="Summary Stats")
-        missing.to_frame("Missing").to_excel(writer, sheet_name="Missing Values")
-        if len(numeric_cols) > 1:
-            df[numeric_cols].corr().to_excel(writer, sheet_name="Correlation")
+        # 6. Line plot (if any datetime column exists)
+        date_cols = df.select_dtypes(include="datetime").columns
+        if len(date_cols) > 0 and len(num_cols) > 0:
+            plt.figure()
+            df.set_index(date_cols[0])[num_cols[0]].plot()
+            plt.title(f"Line Plot of {num_cols[0]} over {date_cols[0]}")
+            plt.ylabel(num_cols[0])
+            plt.savefig(os.path.join(plots_dir, f"{num_cols[0]}_time_series.png"))
+            plt.close()
 
-    print(f"[Analyze] Analysis complete. Report: {report_file}, Plots in out/plots/")
-    results["report_file"] = report_file
+        logging.info(f"[Analyze] Plots saved to {plots_dir}")
+        click.echo(f"Plots saved to {plots_dir}")
 
-    # Always add missing values summary
-    results["missing"] = df.isna().sum().to_dict()
-
-    # Always add columns summary
-    columns_summary = []
-    for col in df.columns:
-        dtype = str(df[col].dtype)
-        missing_count = int(df[col].isna().sum())
-        if pd.api.types.is_numeric_dtype(df[col]):
-            stats = {
-                "min": df[col].min(),
-                "max": df[col].max(),
-                "mean": df[col].mean(),
-                "std": df[col].std()
-            }
-        elif pd.api.types.is_datetime64_any_dtype(df[col]):
-            stats = {
-                "earliest": str(df[col].min()),
-                "latest": str(df[col].max())
-            }
-        else:
-            stats = {
-                "unique": int(df[col].nunique()),
-                "top": df[col].mode()[0] if not df[col].mode().empty else None
-            }
-        columns_summary.append({
-            "column": col,
-            "dtype": dtype,
-            "missing": missing_count,
-            "stats": stats
-        })
-    results["columns_summary"] = columns_summary
-
-    return results
+    except Exception as e:
+        logging.error(f"[Analyze] Failed for {dataset_name}: {e}")
+        click.echo(f"Error during analysis: {e}")
